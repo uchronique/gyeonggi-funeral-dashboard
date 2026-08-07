@@ -235,8 +235,33 @@ def aggregate_sigun(regions, facilities, arcs):
     return out
 
 
-st.title("🕯️ 경기도 장례서비스 공간 접근성 대시보드")
-st.caption("Arc는 실제 이용 이동량이 아니라, 거리와 시설 규모를 이용해 계산한 잠재적 서비스 연결입니다.")
+st.markdown(
+    """
+    <style>
+    .block-container {padding-top: 1.5rem; padding-bottom: 2rem; max-width: 1420px;}
+    .hero-kicker {color:#2563eb; font-size:.82rem; font-weight:800; letter-spacing:.16em; margin-bottom:.25rem;}
+    .hero-year {display:inline-flex; align-items:center; gap:.45rem; padding:.28rem .7rem;
+        border-radius:999px; background:#eff6ff; color:#1d4ed8; font-weight:700; font-size:.82rem;}
+    [data-testid="stMetric"] {background:linear-gradient(145deg,#ffffff,#f8fafc); border:1px solid #e2e8f0;
+        border-radius:16px; padding:1rem 1.1rem; box-shadow:0 8px 24px rgba(15,23,42,.05);}
+    [data-testid="stMetricLabel"] {color:#64748b;}
+    [data-testid="stMetricValue"] {color:#0f172a;}
+    .map-legend {display:flex; gap:1.2rem; align-items:center; color:#475569; font-size:.88rem; margin:.25rem 0 .8rem;}
+    .legend-dot {display:inline-block; width:.7rem; height:.7rem; border-radius:50%; margin-right:.35rem;}
+    .detail-card {border:1px solid #e2e8f0; border-radius:18px; padding:1.15rem 1.25rem;
+        background:linear-gradient(145deg,#ffffff,#f8fafc); min-height:300px;}
+    .detail-name {font-size:1.65rem; font-weight:800; color:#0f172a; margin-bottom:.8rem;}
+    .detail-row {display:flex; justify-content:space-between; padding:.72rem 0; border-bottom:1px solid #e2e8f0;}
+    .detail-label {color:#64748b;} .detail-value {font-weight:750; color:#0f172a;}
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
+st.markdown('<div class="hero-kicker">GYEONGGI FUNERAL INFRASTRUCTURE</div>', unsafe_allow_html=True)
+st.title("경기도 장례 인프라 공간 접근성 대시보드")
+st.markdown('<span class="hero-year">● 2024</span>', unsafe_allow_html=True)
+st.caption("지역별 사망 수요와 장례시설 공급을 연결해 공간 접근성과 공급압력을 살펴봅니다.")
 
 api_key = get_secret("GG_API_KEY")
 
@@ -244,11 +269,15 @@ with st.sidebar:
     st.header("분석 설정")
     top_n = st.slider("지역별 연결 시설 수", 1, 5, 2)
     alpha = st.slider("거리 감쇠 α", 0.5, 3.0, 1.5, 0.1)
-    selected_sigun = st.selectbox("지역 강조", ["전체"] + list(SIGUN_CENTERS.keys()))
+    sigun_options = ["전체"] + list(SIGUN_CENTERS.keys())
+    default_sigun = sigun_options.index("양평군")
+    selected_sigun = st.selectbox("지역 선택", sigun_options, index=default_sigun)
+    arc_strength = st.slider("Arc 강조", 0.6, 1.8, 1.0, 0.1)
+    show_columns = st.toggle("시설 수용력 기둥", value=True)
     st.divider()
-    st.markdown("**접근성 점수**")
+    st.markdown("**지도 읽는 법**")
+    st.caption("파랑은 지역 수요 지점, 주황은 장례시설입니다. Arc의 굵기는 해당 시설로 배분된 잠재 수요 비중을 나타냅니다.")
     st.latex(r"Score_{ij}=Capacity_j / Distance_{ij}^{\alpha}")
-    st.caption("실제 이용·선호·교통시간이 아닌 분석용 잠재 접근성입니다.")
 
 try:
     raw = fetch_facilities(api_key)
@@ -268,24 +297,34 @@ arcs = build_arcs(regions, facilities, top_n=top_n, alpha=alpha)
 summary = aggregate_sigun(regions, facilities, arcs)
 colored_geojson = load_colored_geojson(summary)
 
-map_arcs = arcs if selected_sigun == "전체" else arcs[arcs.sigun == selected_sigun]
-map_facilities = facilities.copy()
-if selected_sigun != "전체":
-    targets = set(map_arcs["facility"])
-    map_facilities["selected"] = map_facilities["facility"].isin(targets)
-else:
-    map_facilities["selected"] = True
+average_distance = arcs["distance_km"].mean() if not arcs.empty else np.nan
+m1, m2, m3, m4 = st.columns(4)
+m1.metric("사망자수", f"{deaths['deaths'].sum():,.0f}명" if not deaths.empty else "-")
+m2.metric("시설 수", f"{len(facilities):,}개")
+m3.metric("총 수용력", f"{facilities['capacity'].sum():,.0f}")
+m4.metric("평균 연결거리", f"{average_distance:,.1f} km" if pd.notna(average_distance) else "-")
 
-k1, k2, k3, k4 = st.columns(4)
-k1.metric("장례시설", f"{len(facilities):,}개")
-k2.metric("총 시설규모 지표", f"{facilities['capacity'].sum():,.0f}")
-if not deaths.empty:
-    k3.metric("사망자수", f"{deaths['deaths'].sum():,.0f}명")
-    valid_pressure = summary["pressure"].replace([np.inf, -np.inf], np.nan).dropna()
-    k4.metric("중앙 공급압력", f"{valid_pressure.median():,.1f}" if not valid_pressure.empty else "-")
+if selected_sigun == "전체":
+    map_arcs = arcs.copy()
+    map_regions = regions.copy()
+    map_facilities = facilities.copy()
+    map_arcs["display_width"] = (0.45 + 0.8 * map_arcs["share"]) * arc_strength
+    source_color = [37, 99, 235, 45]
+    target_color = [249, 115, 22, 65]
+    arc_height = 0.18
+    view = pdk.ViewState(latitude=37.45, longitude=127.05, zoom=8.15, pitch=48, bearing=-8)
 else:
-    k3.metric("사망자수", "CSV 미연결")
-    k4.metric("지역별 연결", f"TOP {top_n}")
+    map_arcs = arcs[arcs["sigun"] == selected_sigun].copy()
+    map_regions = regions[regions["sigun"] == selected_sigun].copy()
+    target_names = set(map_arcs["facility"])
+    map_facilities = facilities[facilities["facility"].isin(target_names)].copy()
+    map_arcs["display_width"] = (2.5 + 4.5 * map_arcs["share"]) * arc_strength
+    source_color = [37, 99, 235, 210]
+    target_color = [249, 115, 22, 235]
+    arc_height = 0.58
+    center_lon = pd.concat([map_regions["source_lon"], map_arcs["target_lon"]]).mean()
+    center_lat = pd.concat([map_regions["source_lat"], map_arcs["target_lat"]]).mean()
+    view = pdk.ViewState(latitude=float(center_lat), longitude=float(center_lon), zoom=9.35, pitch=55, bearing=-12)
 
 layers = []
 
@@ -298,8 +337,26 @@ if colored_geojson is not None:
             filled=True,
             stroked=True,
             get_fill_color="properties.fill_color",
-            get_line_color=[90, 90, 90, 120],
-            line_width_min_pixels=1,
+            get_line_color=[100, 116, 139, 95],
+            line_width_min_pixels=0.7,
+            pickable=True,
+            auto_highlight=True,
+        )
+    )
+
+if show_columns:
+    layers.append(
+        pdk.Layer(
+            "ColumnLayer",
+            id="facility-columns",
+            data=map_facilities,
+            get_position="[lon, lat]",
+            get_elevation="capacity",
+            elevation_scale=2500,
+            radius=360 if selected_sigun != "전체" else 220,
+            get_fill_color=[249, 115, 22, 205],
+            get_line_color=[154, 52, 18, 230],
+            stroked=True,
             pickable=True,
             auto_highlight=True,
         )
@@ -307,29 +364,14 @@ if colored_geojson is not None:
 
 layers.append(
     pdk.Layer(
-        "ColumnLayer",
-        id="facility-columns",
-        data=map_facilities,
-        get_position="[lon, lat]",
-        get_elevation="capacity * 180",
-        elevation_scale=1,
-        radius=450,
-        get_fill_color=[245, 158, 11, 160],
-        pickable=True,
-        auto_highlight=True,
-    )
-)
-
-layers.append(
-    pdk.Layer(
         "ScatterplotLayer",
         id="facility-points",
         data=map_facilities,
         get_position="[lon, lat]",
-        get_radius="700 if selected else 350",
-        get_fill_color=[255, 245, 210, 220],
-        get_line_color=[80, 55, 20, 220],
-        line_width_min_pixels=1,
+        get_radius=520 if selected_sigun != "전체" else 240,
+        get_fill_color=[255, 237, 213, 245],
+        get_line_color=[234, 88, 12, 245],
+        line_width_min_pixels=2,
         stroked=True,
         pickable=True,
     )
@@ -343,11 +385,11 @@ if not map_arcs.empty:
             data=map_arcs,
             get_source_position="[source_lon, source_lat]",
             get_target_position="[target_lon, target_lat]",
-            get_source_color=[59, 130, 246, 40],
-            get_target_color=[245, 158, 11, 55],
-            get_width="arc_width",
+            get_source_color=source_color,
+            get_target_color=target_color,
+            get_width="display_width",
             width_units="pixels",
-            get_height=0.12,
+            get_height=arc_height,
             pickable=True,
             auto_highlight=True,
         )
@@ -357,53 +399,109 @@ layers.append(
     pdk.Layer(
         "ScatterplotLayer",
         id="region-points",
-        data=regions,
+        data=map_regions,
         get_position="[source_lon, source_lat]",
-        get_radius=600,
-        get_fill_color=[59, 130, 246, 210],
+        get_radius=900 if selected_sigun != "전체" else 430,
+        get_fill_color=[37, 99, 235, 235],
+        get_line_color=[239, 246, 255, 255],
+        line_width_min_pixels=2,
+        stroked=True,
         pickable=True,
     )
 )
 
-view = pdk.ViewState(latitude=37.45, longitude=127.05, zoom=8.2, pitch=45, bearing=-8)
+if selected_sigun != "전체":
+    layers.append(
+        pdk.Layer(
+            "TextLayer",
+            id="region-label",
+            data=map_regions,
+            get_position="[source_lon, source_lat]",
+            get_text="sigun",
+            get_size=16,
+            size_units="pixels",
+            get_color=[15, 23, 42, 255],
+            get_pixel_offset=[0, -24],
+            get_text_anchor="'middle'",
+            get_alignment_baseline="'bottom'",
+        )
+    )
+    layers.append(
+        pdk.Layer(
+            "TextLayer",
+            id="facility-labels",
+            data=map_facilities,
+            get_position="[lon, lat]",
+            get_text="facility",
+            get_size=12,
+            size_units="pixels",
+            get_color=[124, 45, 18, 255],
+            get_pixel_offset=[0, -20],
+            get_text_anchor="'middle'",
+            get_alignment_baseline="'bottom'",
+        )
+    )
 
 tooltip = {
-    "html": "<b>{facility}</b><br/>{sigun}<br/>거리: {distance_km} km<br/>규모: {capacity}<br/>빈소/실 지표: {rooms}",
-    "style": {"backgroundColor": "#111827", "color": "white"},
+    "html": "<b>{facility}{sigun}</b><br/>거리 {distance_km} km<br/>수용력 {capacity}<br/>잠재 배분 {share}",
+    "style": {"backgroundColor": "#0f172a", "color": "white", "borderRadius": "10px"},
 }
-
 deck = pdk.Deck(layers=layers, initial_view_state=view, tooltip=tooltip, map_style=None)
 
-st.subheader("잠재 장례서비스 네트워크")
-st.pydeck_chart(deck, height=650)
+st.subheader("지역 → 장례시설 잠재 연결망")
+st.markdown(
+    '<div class="map-legend">'
+    '<span><i class="legend-dot" style="background:#2563eb"></i>지역 수요</span>'
+    '<span>Arc 흐름 →</span>'
+    '<span><i class="legend-dot" style="background:#f97316"></i>장례시설 공급</span>'
+    '</div>',
+    unsafe_allow_html=True,
+)
+st.pydeck_chart(deck, height=585, use_container_width=True)
+st.caption("Arc 색상은 파랑(지역)에서 주황(장례시설)으로 이어지며, 굵기는 잠재 배분 비중을 나타냅니다.")
 
-left, right = st.columns([1.15, 0.85])
+left, right = st.columns([1.05, 0.95], gap="large")
+
 with left:
-    st.subheader("지역별 접근성")
-    display_cols = ["sigun", "facilities", "rooms", "capacity", "best_access_km"]
-    if not deaths.empty:
-        display_cols += ["deaths", "pressure"]
-    table = summary[display_cols].copy()
-    table = table.sort_values("pressure" if not deaths.empty else "best_access_km", ascending=not deaths.empty)
-    st.dataframe(table, use_container_width=True, hide_index=True)
+    st.subheader("공급압력 TOP 10")
+    pressure_top = summary.replace([np.inf, -np.inf], np.nan).dropna(subset=["pressure"]).nlargest(10, "pressure")
+    if pressure_top.empty:
+        st.info("사망자수와 시설 수용력 데이터가 있어야 공급압력을 계산할 수 있습니다.")
+    else:
+        pressure_chart = pressure_top[["sigun", "pressure"]].sort_values("pressure")
+        st.bar_chart(
+            pressure_chart,
+            x="sigun",
+            y="pressure",
+            horizontal=True,
+            color="#2563eb",
+            height=360,
+        )
 
 with right:
-    st.subheader("Arc 상세")
-    detail = map_arcs[["sigun", "rank", "facility", "distance_km", "capacity", "share"]].copy()
-    detail["share"] = (detail["share"] * 100).round(1)
-    detail["distance_km"] = detail["distance_km"].round(1)
-    st.dataframe(detail, use_container_width=True, hide_index=True)
+    st.subheader("지역 상세정보")
+    if selected_sigun == "전체":
+        detail_sigun = pressure_top.iloc[0]["sigun"] if not pressure_top.empty else regions.iloc[0]["sigun"]
+        st.caption(f"전체 보기에서는 공급압력이 가장 높은 {detail_sigun}을 표시합니다.")
+    else:
+        detail_sigun = selected_sigun
+
+    detail = summary[summary["sigun"] == detail_sigun].iloc[0]
+    detail_deaths = f"{detail['deaths']:,.0f}명" if pd.notna(detail["deaths"]) else "-"
+    detail_distance = f"{detail['best_access_km']:.1f} km" if pd.notna(detail["best_access_km"]) else "-"
+    st.markdown(
+        f"""
+        <div class="detail-card">
+          <div class="detail-name">{detail_sigun}</div>
+          <div class="detail-row"><span class="detail-label">사망자</span><span class="detail-value">{detail_deaths}</span></div>
+          <div class="detail-row"><span class="detail-label">장례시설</span><span class="detail-value">{int(detail['facilities']):,}개</span></div>
+          <div class="detail-row"><span class="detail-label">총 수용력</span><span class="detail-value">{detail['capacity']:,.0f}</span></div>
+          <div class="detail-row"><span class="detail-label">최근접 연결</span><span class="detail-value">{detail_distance}</span></div>
+          <div class="detail-row"><span class="detail-label">공급압력</span><span class="detail-value">{detail['pressure']:,.1f}</span></div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
 st.divider()
-st.markdown("### 데이터 연결 방법")
-st.markdown(
-    """
-1. 경기데이터드림에서 Open API 인증키를 발급합니다.
-2. Streamlit Community Cloud의 App settings → Secrets에 `GG_API_KEY`를 저장합니다.
-3. KOSIS 시군구별 사망자수는 `data/deaths_by_sigun.csv`에서 불러옵니다.
-4. CSV는 최소 `sigun,deaths` 두 컬럼이면 됩니다.
-5. `data/gyeonggi_sigun.geojson`을 추가하면 시군구 PolygonLayer도 자동 표시됩니다.
-
-**주의:** 현재 Arc는 실제 장례식장 이용 OD가 아니라 `시설규모 / 거리^α`로 생성한 잠재 연결입니다.
-"""
-)
+st.caption("주의: Arc는 실제 장례식장 이용 OD가 아니라 시설규모와 거리 감쇠로 산출한 잠재 연결입니다.")
