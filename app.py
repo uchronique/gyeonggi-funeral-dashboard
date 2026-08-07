@@ -187,9 +187,9 @@ def build_arcs(regions: pd.DataFrame, facilities: pd.DataFrame, top_n=3, alpha=1
         return arc_df
     if arc_df["deaths"].notna().any():
         mx = arc_df["demand_flow"].max() or 1
-        arc_df["arc_width"] = 0.7 + 3.3 * np.sqrt(arc_df["demand_flow"] / mx)
+        arc_df["arc_width"] = 0.5 + 1.8 * np.sqrt(arc_df["demand_flow"] / mx)
     else:
-        arc_df["arc_width"] = 0.7 + 3.3 * arc_df["share"]
+        arc_df["arc_width"] = 0.5 + 1.8 * arc_df["share"]
     return arc_df
 
 
@@ -343,11 +343,11 @@ if not map_arcs.empty:
             data=map_arcs,
             get_source_position="[source_lon, source_lat]",
             get_target_position="[target_lon, target_lat]",
-            get_source_color=[59, 130, 246, 145],
-            get_target_color=[245, 158, 11, 185],
+            get_source_color=[59, 130, 246, 105],
+            get_target_color=[245, 158, 11, 135],
             get_width="arc_width",
             width_units="pixels",
-            get_height=0.35,
+            get_height=0.18,
             pickable=True,
             auto_highlight=True,
         )
