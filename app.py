@@ -308,11 +308,12 @@ if selected_sigun == "전체":
     map_arcs = arcs.copy()
     map_regions = regions.copy()
     map_facilities = facilities.copy()
-    map_arcs["display_width"] = (0.45 + 0.8 * map_arcs["share"]) * arc_strength
-    source_color = [37, 99, 235, 45]
-    target_color = [249, 115, 22, 65]
+    arc_width = 1.0 * arc_strength
+    arc_width_max = 1.8
+    source_color = [37, 99, 235, 55]
+    target_color = [249, 115, 22, 75]
     arc_height = 0.18
-    view = pdk.ViewState(latitude=37.45, longitude=127.05, zoom=8.15, pitch=48, bearing=-8)
+    view = pdk.ViewState(latitude=37.45, longitude=127.05, zoom=8.15, pitch=42, bearing=-8)
 else:
     map_arcs = arcs[arcs["sigun"] == selected_sigun].copy()
     map_regions = regions[regions["sigun"] == selected_sigun].copy()
@@ -323,13 +324,14 @@ else:
         right_on=["target_lon", "target_lat"],
         how="inner",
     ).drop(columns=["target_lon", "target_lat"])
-    map_arcs["display_width"] = (2.5 + 4.5 * map_arcs["share"]) * arc_strength
-    source_color = [37, 99, 235, 210]
-    target_color = [249, 115, 22, 235]
-    arc_height = 0.58
+    arc_width = 4.0 * arc_strength
+    arc_width_max = 6.0
+    source_color = [37, 99, 235, 225]
+    target_color = [249, 115, 22, 245]
+    arc_height = 0.42
     center_lon = pd.concat([map_regions["source_lon"], map_arcs["target_lon"]]).mean()
     center_lat = pd.concat([map_regions["source_lat"], map_arcs["target_lat"]]).mean()
-    view = pdk.ViewState(latitude=float(center_lat), longitude=float(center_lon), zoom=9.35, pitch=55, bearing=-12)
+    view = pdk.ViewState(latitude=float(center_lat), longitude=float(center_lon), zoom=10.1, pitch=38, bearing=-8)
 
 layers = []
 
@@ -391,8 +393,11 @@ if not map_arcs.empty:
             get_target_position="[target_lon, target_lat]",
             get_source_color=source_color,
             get_target_color=target_color,
-            get_width="display_width",
+            get_width=arc_width,
             width_units="pixels",
+            width_scale=1,
+            width_min_pixels=0.8,
+            width_max_pixels=arc_width_max,
             get_height=arc_height,
             pickable=True,
             auto_highlight=True,
