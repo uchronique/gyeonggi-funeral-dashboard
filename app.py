@@ -326,12 +326,13 @@ else:
     ).drop(columns=["target_lon", "target_lat"])
     arc_width = 4.0 * arc_strength
     arc_width_max = 6.0
+    map_arcs["arc_tilt"] = np.where(map_arcs["rank"] % 2 == 0, 14, -14)
     source_color = [37, 99, 235, 225]
     target_color = [249, 115, 22, 245]
-    arc_height = 0.42
+    arc_height = 1.6
     center_lon = pd.concat([map_regions["source_lon"], map_arcs["target_lon"]]).mean()
     center_lat = pd.concat([map_regions["source_lat"], map_arcs["target_lat"]]).mean()
-    view = pdk.ViewState(latitude=float(center_lat), longitude=float(center_lon), zoom=10.1, pitch=38, bearing=-8)
+    view = pdk.ViewState(latitude=float(center_lat), longitude=float(center_lon), zoom=9.6, pitch=48, bearing=-8)
 
 layers = []
 
@@ -399,6 +400,7 @@ if not map_arcs.empty:
             width_min_pixels=0.8,
             width_max_pixels=arc_width_max,
             get_height=arc_height,
+            get_tilt="arc_tilt" if selected_sigun != "전체" else 0,
             pickable=True,
             auto_highlight=True,
         )
