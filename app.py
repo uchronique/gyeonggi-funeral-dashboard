@@ -187,9 +187,9 @@ def build_arcs(regions: pd.DataFrame, facilities: pd.DataFrame, top_n=3, alpha=1
         return arc_df
     if arc_df["deaths"].notna().any():
         mx = arc_df["demand_flow"].max() or 1
-        arc_df["arc_width"] = 0.5 + 1.8 * np.sqrt(arc_df["demand_flow"] / mx)
+        arc_df["arc_width"] = 0.25 + 0.75 * np.sqrt(arc_df["demand_flow"] / mx)
     else:
-        arc_df["arc_width"] = 0.5 + 1.8 * arc_df["share"]
+        arc_df["arc_width"] = 0.25 + 0.75 * arc_df["share"]
     return arc_df
 
 
@@ -242,7 +242,7 @@ api_key = get_secret("GG_API_KEY")
 
 with st.sidebar:
     st.header("분석 설정")
-    top_n = st.slider("지역별 연결 시설 수", 1, 5, 3)
+    top_n = st.slider("지역별 연결 시설 수", 1, 5, 2)
     alpha = st.slider("거리 감쇠 α", 0.5, 3.0, 1.5, 0.1)
     selected_sigun = st.selectbox("지역 강조", ["전체"] + list(SIGUN_CENTERS.keys()))
     st.divider()
@@ -343,11 +343,11 @@ if not map_arcs.empty:
             data=map_arcs,
             get_source_position="[source_lon, source_lat]",
             get_target_position="[target_lon, target_lat]",
-            get_source_color=[59, 130, 246, 105],
-            get_target_color=[245, 158, 11, 135],
+            get_source_color=[59, 130, 246, 40],
+            get_target_color=[245, 158, 11, 55],
             get_width="arc_width",
             width_units="pixels",
-            get_height=0.18,
+            get_height=0.12,
             pickable=True,
             auto_highlight=True,
         )
