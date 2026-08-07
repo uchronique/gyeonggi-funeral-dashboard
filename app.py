@@ -316,8 +316,13 @@ if selected_sigun == "전체":
 else:
     map_arcs = arcs[arcs["sigun"] == selected_sigun].copy()
     map_regions = regions[regions["sigun"] == selected_sigun].copy()
-    target_names = set(map_arcs["facility"])
-    map_facilities = facilities[facilities["facility"].isin(target_names)].copy()
+    target_coords = map_arcs[["target_lon", "target_lat"]].drop_duplicates()
+    map_facilities = facilities.merge(
+        target_coords,
+        left_on=["lon", "lat"],
+        right_on=["target_lon", "target_lat"],
+        how="inner",
+    ).drop(columns=["target_lon", "target_lat"])
     map_arcs["display_width"] = (2.5 + 4.5 * map_arcs["share"]) * arc_strength
     source_color = [37, 99, 235, 210]
     target_color = [249, 115, 22, 235]
@@ -334,11 +339,10 @@ if colored_geojson is not None:
             "GeoJsonLayer",
             id="sigun-polygons",
             data=colored_geojson,
-            filled=True,
+            filled=False,
             stroked=True,
-            get_fill_color="properties.fill_color",
-            get_line_color=[100, 116, 139, 95],
-            line_width_min_pixels=0.7,
+            get_line_color=[100, 116, 139, 115],
+            line_width_min_pixels=0.8,
             pickable=True,
             auto_highlight=True,
         )
