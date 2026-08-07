@@ -479,11 +479,15 @@ with left:
     if pressure_top.empty:
         st.info("사망자수와 시설 수용력 데이터가 있어야 공급압력을 계산할 수 있습니다.")
     else:
-        pressure_chart = pressure_top[["sigun", "pressure"]].sort_values("pressure")
+        pressure_chart = (
+            pressure_top[["sigun", "pressure"]]
+            .sort_values("pressure")
+            .rename(columns={"sigun": "지역", "pressure": "공급압력"})
+        )
         st.bar_chart(
             pressure_chart,
-            x="sigun",
-            y="pressure",
+            x="지역",
+            y="공급압력",
             horizontal=True,
             color="#2563eb",
             height=360,
