@@ -123,7 +123,8 @@ def normalize_facilities(raw: pd.DataFrame) -> pd.DataFrame:
     out["capacity"] = out["capacity"].fillna(out["rooms"]).clip(lower=1)
     out["tooltip_text"] = (
         "<b>" + out["facility"] + "</b><br/>"
-        + out["sigun"] + "<br/>수용력 " + out["capacity"].round(0).astype(int).astype(str)
+        + out["sigun"]
+        + "<br/>안치 수용능력 " + out["capacity"].round(0).astype(int).astype(str)
         + "<br/>" + out["address"]
     )
     return out.drop_duplicates(subset=["facility", "lat", "lon"]).reset_index(drop=True)
@@ -206,13 +207,13 @@ def build_arcs(regions: pd.DataFrame, facilities: pd.DataFrame, top_n=2, alpha=1
     if arcs.empty:
         return arcs
 
-    max_flow = max(float(arcs["demand_flow"].max()), 1.0)
+    max_capacity = max(float(facilities["capacity"].max()), 1.0)
     max_distance = max(float(arcs["distance_km"].max()), 1.0)
-    rank_factor = arcs["rank"].map({1: 1.0, 2: 0.82, 3: 0.68, 4: 0.58, 5: 0.50}).fillna(0.5)
-    opacity = arcs["rank"].map({1: 225, 2: 175, 3: 135, 4: 105, 5: 85}).fillna(80).astype(int)
+    opacity = arcs["rank"].map({1: 230, 2: 185, 3: 145, 4: 110, 5: 90}).fillna(85).astype(int)
     tilt = arcs["rank"].map({1: 0, 2: 12, 3: -12, 4: 21, 5: -21}).fillna(0)
 
-    arcs["arc_width"] = (1.15 + 4.6 * np.sqrt(arcs["demand_flow"] / max_flow)) * rank_factor
+    # Arc의 굵기는 목적지 장례시설의 안치 수용능력을 직접 반영합니다.
+    arcs["arc_width"] = 1.2 + 6.2 * np.sqrt(arcs["capacity"] / max_capacity)
     arcs["arc_height"] = 0.65 + 1.65 * np.sqrt(arcs["distance_km"] / max_distance)
     arcs["arc_tilt"] = tilt
     arcs["source_color"] = opacity.map(lambda a: [37, 99, 235, int(a)])
@@ -221,6 +222,7 @@ def build_arcs(regions: pd.DataFrame, facilities: pd.DataFrame, top_n=2, alpha=1
         lambda r: (
             f"<b>{r['sigun']} → {r['facility']}</b><br/>"
             f"거리 {r['distance_km']:.1f} km<br/>"
+            f"안치 수용능력 {r['capacity']:.0f}<br/>"
             f"후보 순위 {int(r['rank'])}위<br/>"
             f"잠재 배분 {r['share'] * 100:.1f}%"
         ),
@@ -303,8 +305,9 @@ with st.sidebar:
     view_mode = st.radio("Arc 표시 범위", ["경기도 전체", "선택 지역"], index=0)
     top_n = st.slider("시군별 연결 시설 수", 1, 5, 2)
     alpha = st.slider("거리 감쇠 α", 0.5, 3.0, 1.5, 0.1)
-    arc_scale = st.slider("Arc 굵기", 0.6, 2.2, 1.15, 0.05)
+    arc_scale = st.slider("Arc 굵기 배율", 0.6, 2.2, 1.1, 0.05)
     arc_height_scale = st.slider("Arc 높이", 0.5, 2.5, 1.25, 0.05)
+    point_scale = st.slider("시설 점 크기 배율", 0.6, 2.2, 1.0, 0.05)
 
     sigun_options = list(SIGUN_CENTERS.keys())
     if view_mode == "경기도 전체":
@@ -314,11 +317,10 @@ with st.sidebar:
         selected_sigun = st.selectbox("지역 선택", sigun_options, index=sigun_options.index("양평군"))
         focus_sigun = selected_sigun
 
-    show_columns = st.toggle("시설 수용력 기둥", value=True)
     show_region_labels = st.toggle("시군명 표시", value=view_mode == "선택 지역")
     st.divider()
     st.markdown("**지도 읽는 법**")
-    st.caption("Arc 굵기 = 사망자 기반 잠재수요, Arc 높이 = 연결거리, 좌우 기울기 = 후보 시설 순위 구분")
+    st.caption("주황색 점 크기 = 안치 수용능력, Arc 굵기 = 목적지 시설 수용능력, Arc 높이 = 연결거리")
     st.latex(r"Score_{ij}=Capacity_j / Distance_{ij}^{\alpha}")
 
 try:
@@ -345,7 +347,7 @@ average_distance = arcs["distance_km"].mean() if not arcs.empty else np.nan
 m1, m2, m3, m4 = st.columns(4)
 m1.metric(f"{year} 사망자수", f"{deaths['deaths'].sum():,.0f}명" if not deaths.empty else "-")
 m2.metric("장례시설 수", f"{len(facilities):,}개")
-m3.metric("총 수용력", f"{facilities['capacity'].sum():,.0f}")
+m3.metric("총 안치 수용능력", f"{facilities['capacity'].sum():,.0f}")
 m4.metric("평균 연결거리", f"{average_distance:,.1f} km" if pd.notna(average_distance) else "-")
 
 if view_mode == "경기도 전체":
@@ -367,6 +369,10 @@ else:
     center_lat = pd.concat([map_regions["source_lat"], map_arcs["target_lat"]]).mean()
     view = pdk.ViewState(latitude=float(center_lat), longitude=float(center_lon), zoom=9.25, pitch=52, bearing=-8)
 
+max_capacity = max(float(facilities["capacity"].max()), 1.0)
+map_facilities["point_radius_display"] = (
+    4.5 + 15.5 * np.sqrt(map_facilities["capacity"] / max_capacity)
+) * point_scale
 map_arcs["height_display"] = map_arcs["arc_height"] * arc_height_scale
 map_arcs["width_display"] = map_arcs["arc_width"] * arc_scale
 
@@ -402,7 +408,7 @@ if not map_arcs.empty:
             get_tilt="arc_tilt",
             width_units="pixels",
             width_min_pixels=1.0,
-            width_max_pixels=7.5 if view_mode == "경기도 전체" else 10.0,
+            width_max_pixels=10.0 if view_mode == "경기도 전체" else 13.0,
             pickable=True,
             auto_highlight=True,
         )
@@ -410,7 +416,7 @@ if not map_arcs.empty:
 
 if view_mode == "경기도 전체" and focus_sigun != "강조 없음":
     focus_arcs = arcs[arcs["sigun"] == focus_sigun].copy()
-    focus_arcs["width_focus"] = focus_arcs["arc_width"] * arc_scale * 1.8
+    focus_arcs["width_focus"] = focus_arcs["arc_width"] * arc_scale * 1.65
     focus_arcs["height_focus"] = focus_arcs["arc_height"] * arc_height_scale * 1.12
     focus_arcs["source_focus"] = [[29, 78, 216, 255]] * len(focus_arcs)
     focus_arcs["target_focus"] = [[234, 88, 12, 255]] * len(focus_arcs)
@@ -428,40 +434,28 @@ if view_mode == "경기도 전체" and focus_sigun != "강조 없음":
             get_tilt="arc_tilt",
             width_units="pixels",
             width_min_pixels=2.2,
-            width_max_pixels=12,
+            width_max_pixels=15,
             pickable=True,
         )
     )
 
-if show_columns:
-    layers.append(
-        pdk.Layer(
-            "ColumnLayer",
-            id="facility-columns",
-            data=map_facilities,
-            get_position="[lon, lat]",
-            get_elevation="capacity",
-            elevation_scale=2200,
-            radius=190 if view_mode == "경기도 전체" else 330,
-            get_fill_color=[249, 115, 22, 180],
-            get_line_color=[154, 52, 18, 220],
-            stroked=True,
-            pickable=True,
-        )
-    )
-
+# 장례시설은 3D 기둥 대신 수용능력에 비례하는 원형 점으로 표현합니다.
 layers.append(
     pdk.Layer(
         "ScatterplotLayer",
         id="facility-points",
         data=map_facilities,
         get_position="[lon, lat]",
-        get_radius=210 if view_mode == "경기도 전체" else 420,
-        get_fill_color=[255, 237, 213, 245],
-        get_line_color=[234, 88, 12, 245],
+        get_radius="point_radius_display",
+        radius_units="pixels",
+        radius_min_pixels=4,
+        radius_max_pixels=24,
+        get_fill_color=[249, 115, 22, 205],
+        get_line_color=[154, 52, 18, 245],
         line_width_min_pixels=1.5,
         stroked=True,
         pickable=True,
+        auto_highlight=True,
     )
 )
 
@@ -508,8 +502,8 @@ st.markdown(
     '<div class="map-legend">'
     '<span><i class="legend-dot" style="background:#2563eb"></i>시군 수요 지점</span>'
     '<span>Arc: 수요 → 시설</span>'
-    '<span><i class="legend-dot" style="background:#f97316"></i>장례시설</span>'
-    '<span>굵기=잠재수요 · 높이=거리 · tilt=후보순위</span>'
+    '<span><i class="legend-dot" style="background:#f97316"></i>장례시설 · 점 크기=안치 수용능력</span>'
+    '<span>Arc 굵기=목적지 수용능력 · 높이=거리 · tilt=후보순위</span>'
     '</div>',
     unsafe_allow_html=True,
 )
@@ -518,7 +512,7 @@ if view_mode == "경기도 전체":
     st.info(f"현재 31개 시군에서 시군별 상위 {top_n}개 시설을 연결해 총 {len(map_arcs):,}개의 Arc를 표시하고 있습니다.")
 
 st.pydeck_chart(deck, height=650, use_container_width=True)
-st.caption("Arc는 실제 장례식장 이용 OD가 아니라 사망자수·시설 수용력·거리 감쇠로 계산한 잠재적 서비스 연결입니다.")
+st.caption("같은 장례시설로 들어가는 Arc는 동일한 수용능력을 반영해 같은 굵기로 표시됩니다. Arc는 실제 이용 OD가 아니라 잠재적 서비스 연결입니다.")
 
 left, right = st.columns([1.05, 0.95], gap="large")
 
@@ -550,7 +544,7 @@ with right:
     d1.metric("사망자", f"{detail['deaths']:,.0f}명" if pd.notna(detail["deaths"]) else "-")
     d2.metric("장례시설", f"{int(detail['facilities']):,}개")
     d3, d4 = st.columns(2)
-    d3.metric("지역 내 총 수용력", f"{detail['capacity']:,.0f}")
+    d3.metric("지역 내 총 안치 수용능력", f"{detail['capacity']:,.0f}")
     d4.metric("최근접 후보", f"{detail['best_access_km']:.1f} km" if pd.notna(detail["best_access_km"]) else "-")
     st.metric("잠재 공급압력", f"{detail['pressure']:,.1f}" if pd.notna(detail["pressure"]) else "-")
 
