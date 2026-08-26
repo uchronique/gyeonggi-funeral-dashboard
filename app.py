@@ -16,6 +16,73 @@ st.set_page_config(
     layout="wide",
 )
 
+st.markdown(
+    """
+    <style>
+    [data-testid="stMetric"] {
+        min-height: 118px;
+        padding: 1.1rem 1.25rem;
+        background: linear-gradient(145deg, #ffffff 0%, #f8fafc 100%);
+        border: 1px solid #e5e7eb;
+        border-radius: 16px;
+        box-shadow: 0 7px 20px rgba(15, 23, 42, 0.09);
+    }
+    [data-testid="stMetricLabel"] {
+        color: #4b5563;
+        font-weight: 650;
+    }
+    [data-testid="stMetricValue"] {
+        color: #111827;
+        font-weight: 750;
+    }
+    [data-testid="stExpander"] {
+        background: #f3f4f6;
+        border: 1px solid #d1d5db;
+        border-radius: 10px;
+    }
+    [data-testid="stExpander"] details summary {
+        color: #1f2937;
+        font-weight: 700;
+    }
+    .header-divider {
+        height: 1px;
+        margin: 1.35rem 0 1.7rem;
+        background: #cbd5e1;
+        border: 0;
+    }
+    .map-title-box {
+        box-sizing: border-box;
+        width: 100%;
+        margin: 0.6rem 0 0.45rem;
+        padding: 0.8rem 1.05rem;
+        background: #111111;
+        color: #ffffff;
+        font-size: 1.35rem;
+        font-weight: 750;
+        line-height: 1.35;
+    }
+    .section-heading {
+        display: flex;
+        align-items: center;
+        gap: 0.65rem;
+        margin: 0.4rem 0 0.9rem;
+        color: #111827;
+        font-size: 1.35rem;
+        font-weight: 750;
+        line-height: 1.35;
+    }
+    .section-heading::before {
+        width: 0.72rem;
+        height: 0.72rem;
+        background: #111111;
+        content: "";
+        flex: 0 0 auto;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
 ROOT = Path(__file__).resolve().parent
 DATA_DIR = ROOT / "data"
 GRID_PATH = DATA_DIR / "gyeonggi_funeral_access_grid.geojson"
@@ -252,6 +319,10 @@ def format_metric(value: float, digits: int = 0) -> str:
     return f"{value:,.{digits}f}"
 
 
+def section_heading(title: str) -> None:
+    st.markdown(f'<h3 class="section-heading">{title}</h3>', unsafe_allow_html=True)
+
+
 st.title("경기도 장례시설 접근성 및 개선 시급지역 분석")
 st.markdown(
     "본 대시보드는 2024년을 기준으로 경기도를 1km 격자로 구분하고, 격자별 80세 이상 "
@@ -259,6 +330,15 @@ st.markdown(
     "따른 장례서비스 수요 증가에 대비해 시설 공급과 잠재수요의 공간적 불균형을 파악했습니다. "
     "이를 바탕으로 장례서비스 개선이 우선적으로 필요한 지역을 제시하고자 합니다."
 )
+with st.expander("접근성 분석 방법", expanded=False):
+    st.markdown(
+        "접근성은 장례시설의 공급량과 격자별 80세 이상 인구를 결합한 중력모델로 "
+        "산출했습니다. 반감거리 5km의 거리감쇠 함수 $w(d)=2^{-d/5}$를 적용하여 가까운 "
+        "시설일수록 크게 반영하고, 각 시설의 공급을 주변 잠재수요가 나누어 이용하는 것으로 "
+        "계산했습니다. 접근성 값이 클수록 잠재수요에 비해 이용 가능한 장례시설이 많고 "
+        "가까운 지역임을 의미합니다."
+    )
+st.markdown('<hr class="header-divider">', unsafe_allow_html=True)
 
 facility_path = find_facility_file()
 missing_files = [path for path in [GRID_PATH] if not path.exists()]
@@ -407,7 +487,7 @@ tooltip = {
     "style": {"backgroundColor": "#172033", "color": "white"},
 }
 
-st.subheader(selected_metric)
+st.markdown(f'<div class="map-title-box">{selected_metric}</div>', unsafe_allow_html=True)
 st.caption(metric_config["direction"])
 st.pydeck_chart(
     pdk.Deck(
@@ -428,7 +508,7 @@ st.divider()
 chart_left, chart_right = st.columns([1, 1])
 
 with chart_left:
-    st.subheader("잠재수요와 접근성")
+    section_heading("잠재수요와 접근성")
     scatter_data = grid.loc[
         grid["pop80"] > 0,
         [
@@ -461,7 +541,7 @@ with chart_left:
     st.plotly_chart(fig, width="stretch")
 
 with chart_right:
-    st.subheader("장례서비스 개선 시급지역")
+    section_heading("장례서비스 개선 시급지역")
     top_n = st.select_slider("표시 개수", options=[10, 20, 30, 50], value=20)
     ranking = grid.nlargest(top_n, "priority_score").copy()
     ranking["rank"] = np.arange(1, len(ranking) + 1)
@@ -489,7 +569,7 @@ with chart_right:
     fig.update_layout(height=430, margin=dict(l=10, r=10, t=10, b=10))
     st.plotly_chart(fig, width="stretch")
 
-st.subheader("장례서비스 개선 시급지역 상세표 (상위 20개)")
+section_heading("장례서비스 개선 시급지역 상세표 (상위 20개)")
 table_columns = [
     "sigungu",
     "admin_dong",
