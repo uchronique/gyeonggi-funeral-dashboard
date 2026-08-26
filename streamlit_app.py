@@ -527,6 +527,9 @@ with chart_left:
     )
     population_cut = scatter_data["pop80"].quantile(0.75)
     access_cut = scatter_data["access_per_1000"].quantile(0.25)
+    population_min_log = np.log10(scatter_data["pop80"].min() * 0.85)
+    population_max_log = np.log10(scatter_data["pop80"].max() * 1.15)
+    population_cut_log = np.log10(population_cut)
     top_priority = scatter_data.nlargest(20, "priority_score").copy()
     urgency_color_map = dict(
         zip(
@@ -569,18 +572,19 @@ with chart_left:
         type="rect",
         xref="x",
         yref="y",
-        x0=population_cut,
-        x1=scatter_data["pop80"].max() * 1.1,
+        # Plotly 보조도형은 로그축에서 log10 좌표를 사용한다.
+        x0=population_cut_log,
+        x1=population_max_log,
         y0=max(0, scatter_data["access_per_1000"].min()),
         y1=access_cut,
         fillcolor="rgba(220, 38, 38, 0.10)",
         line_width=0,
         layer="below",
     )
-    fig.add_vline(x=population_cut, line_dash="dash", line_color="#6b7280")
+    fig.add_vline(x=population_cut_log, line_dash="dash", line_color="#6b7280")
     fig.add_hline(y=access_cut, line_dash="dash", line_color="#6b7280")
     fig.add_annotation(
-        x=scatter_data["pop80"].quantile(0.90),
+        x=np.log10(scatter_data["pop80"].quantile(0.90)),
         y=scatter_data["access_per_1000"].quantile(0.07),
         text="개선 우선 검토영역",
         showarrow=False,
@@ -609,6 +613,7 @@ with chart_left:
     fig.update_xaxes(
         tickvals=[5, 10, 25, 50, 100, 250, 500, 1000, 2000],
         ticktext=["5", "10", "25", "50", "100", "250", "500", "1,000", "2,000"],
+        range=[population_min_log, population_max_log],
         gridcolor="#e5e7eb",
     )
     fig.update_yaxes(gridcolor="#e5e7eb", rangemode="tozero")
