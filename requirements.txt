@@ -1,5 +1,6 @@
-streamlit>=1.45,<2
+streamlit>=1.62,<2
 pandas>=2.2,<3
-numpy>=2.0,<3
+numpy>=1.26,<3
+geopandas>=1.0,<2
 pydeck>=0.9,<1
-requests>=2.32,<3
+plotly>=5.24,<7
