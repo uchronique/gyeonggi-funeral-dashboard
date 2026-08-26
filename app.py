@@ -32,7 +32,7 @@ METRICS = {
         "palette": ["#cae11f", "#48c16e", "#21918c", "#365d8d", "#481d6f"],
         "labels": ["0명", "25명 미만", "50명 미만", "100명 미만", "100명 이상"],
         "alpha": 184,  # 72%
-        "direction": "많을수록 잠재수요가 큼",
+        "direction": "80세 이상 인구가 많을수록 장례서비스에 대한 잠재수요가 클 것으로 예상",
     },
     "수요 대비 장례시설 접근성": {
         "column": "access_per_1000",
@@ -41,7 +41,7 @@ METRICS = {
         "palette": ["#14ebff", "#4ab5ff", "#807fff", "#b54aff", "#eb14ff"],
         "labels": ["매우 불량", "불량", "보통", "양호", "매우 양호"],
         "alpha": 191,  # 75%
-        "direction": "주변의 80세 이상 잠재수요와 시설 공급을 함께 고려하며, 클수록 접근성이 좋음",
+        "direction": "장례시설 공급 상황과 시설 인근 서비스 잠재수요를 함께 고려",
     },
     "장례서비스 개선 시급성": {
         "column": "priority_score",
@@ -50,7 +50,7 @@ METRICS = {
         "palette": ["#ffffd7", "#ffeb6b", "#ff8001", "#941400", "#280000"],
         "labels": ["매우 낮음", "낮음", "보통", "높음", "매우 높음"],
         "alpha": 184,  # 72%
-        "direction": "80세 이상 인구가 많고 수요 대비 접근성이 낮을수록 높음",
+        "direction": "80세 이상 인구가 많을수록, 수요 대비 접근성이 낮을수록 시급성이 높아짐",
     },
 }
 
@@ -231,20 +231,12 @@ def assign_category_colors(
     return [color_by_label.get(str(value), [160, 160, 160, 80]) for value in values]
 
 
-def category_legend_html(
-    labels: list[str], palette: list[str], show_half_distance: bool
-) -> str:
+def category_legend_html(labels: list[str], palette: list[str]) -> str:
     items = [
         "<span style='display:inline-flex;align-items:center;margin-right:14px'>"
         "<i style='width:11px;height:11px;background:#dc2626;border-radius:50%;"
         "display:inline-block;margin-right:4px'></i>장례시설</span>"
     ]
-    if show_half_distance:
-        items.append(
-            "<span style='display:inline-flex;align-items:center;margin-right:14px'>"
-            "<i style='width:13px;height:13px;border:2px solid #2563eb;border-radius:50%;"
-            "display:inline-block;margin-right:4px'></i>반감거리 5km</span>"
-        )
     for label, color in zip(labels, palette):
         items.append(
             f"<span style='display:inline-flex;align-items:center;margin-right:14px'>"
@@ -297,19 +289,8 @@ st.sidebar.header("지도 설정")
 selected_metric = st.sidebar.radio("지도에 표시할 지표", list(METRICS))
 metric_config = METRICS[selected_metric]
 st.sidebar.caption("장례시설은 모든 지도에 빨간 점으로 항상 표시됩니다.")
-show_half_distance = st.sidebar.toggle(
-    "장례시설 반감거리 5km 표시",
-    value=False,
-    help="거리감쇠 가중치가 절반으로 감소하는 시설별 반경 5km를 표시합니다.",
-)
 metric_column = metric_config["column"]
 grade_column = metric_config["grade_column"]
-
-show_only_priority = st.sidebar.checkbox("개선 시급지역 상위 20개만 표시", value=False)
-
-map_grid = grid.copy()
-if show_only_priority:
-    map_grid = map_grid.nlargest(20, "priority_score")
 
 total_pop80 = grid["pop80"].sum()
 total_capacity = facilities["capacity"].fillna(0).sum()
@@ -324,7 +305,7 @@ kpi2.metric("장례시설", f"{len(facilities):,}개")
 kpi3.metric("안치능력", f"{total_capacity:,.0f}명")
 kpi4.metric("인구가중 평균 접근성", format_metric(weighted_access, 3))
 
-display_grid = map_grid.copy()
+display_grid = grid.copy()
 display_grid["fill_color"] = assign_category_colors(
     display_grid[grade_column],
     metric_config["labels"],
@@ -398,22 +379,6 @@ facility_layer_data["detail_3"] = (
     + "명"
 )
 facility_layer_data["detail_4"] = ""
-if show_half_distance:
-    layers.append(
-        pdk.Layer(
-            "ScatterplotLayer",
-            data=facility_layer_data,
-            get_position="[longitude, latitude]",
-            get_radius=5000,
-            radius_units="meters",
-            get_line_color=[37, 99, 235, 190],
-            line_width_min_pixels=1.5,
-            pickable=False,
-            stroked=True,
-            filled=False,
-            parameters={"depthTest": False},
-        )
-    )
 layers.append(
     pdk.Layer(
         "ScatterplotLayer",
@@ -454,9 +419,7 @@ st.pydeck_chart(
     width="stretch",
     height=650,
 )
-legend = category_legend_html(
-    metric_config["labels"], metric_config["palette"], show_half_distance
-)
+legend = category_legend_html(metric_config["labels"], metric_config["palette"])
 st.markdown(legend, unsafe_allow_html=True)
 if metric_column == "access_per_1000":
     st.caption("접근성 등급은 경기도 전체 격자를 기준으로 나눈 5분위 상대등급입니다.")
