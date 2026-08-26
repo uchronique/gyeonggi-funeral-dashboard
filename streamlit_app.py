@@ -382,7 +382,7 @@ weighted_access = np.average(
 kpi1, kpi2, kpi3, kpi4 = st.columns(4)
 kpi1.metric("80세 이상 인구", f"{total_pop80:,.0f}명")
 kpi2.metric("장례시설", f"{len(facilities):,}개")
-kpi3.metric("안치능력", f"{total_capacity:,.0f}명")
+kpi3.metric("안치능력", f"{total_capacity:,.0f}구")
 kpi4.metric("인구가중 평균 접근성", format_metric(weighted_access, 3))
 
 display_grid = grid.copy()
