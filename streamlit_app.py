@@ -519,26 +519,110 @@ with chart_left:
             "access_per_1000",
             "nearest_km",
             "priority_score",
+            "urgency_grade",
         ],
     ].copy()
+    scatter_data["location_label"] = (
+        scatter_data["sigungu"] + " " + scatter_data["admin_dong"]
+    )
+    population_cut = scatter_data["pop80"].quantile(0.75)
+    access_cut = scatter_data["access_per_1000"].quantile(0.25)
+    top_priority = scatter_data.nlargest(20, "priority_score").copy()
+    urgency_color_map = dict(
+        zip(
+            URGENCY_LABELS,
+            ["#fde68a", "#fbbf24", "#fb923c", "#ef4444", "#7f1d1d"],
+        )
+    )
     fig = px.scatter(
         scatter_data,
         x="pop80",
         y="access_per_1000",
-        color="priority_score",
-        size="nearest_km",
-        hover_name="admin_dong",
-        hover_data={"grid_id": True},
-        color_continuous_scale="YlOrRd",
+        color="urgency_grade",
+        hover_name="location_label",
+        hover_data={
+            "grid_id": False,
+            "sigungu": False,
+            "admin_dong": False,
+            "pop80": ":,.0f",
+            "access_per_1000": ":.3f",
+            "priority_score": ":.3f",
+            "urgency_grade": False,
+            "nearest_km": False,
+        },
+        category_orders={"urgency_grade": URGENCY_LABELS},
+        color_discrete_map=urgency_color_map,
+        opacity=0.42,
+        log_x=True,
+        render_mode="webgl",
         labels={
-            "pop80": "80세 이상 인구(명)",
+            "pop80": "80세 이상 인구(명, 로그 척도)",
             "access_per_1000": "수요 대비 장례시설 접근성",
-            "priority_score": "장례서비스 개선 시급성",
-            "nearest_km": "최근접 거리(km)",
+            "priority_score": "개선 시급성 점수",
+            "urgency_grade": "개선 시급성 등급",
         },
     )
-    fig.update_layout(height=430, margin=dict(l=10, r=10, t=10, b=10))
+    fig.update_traces(
+        marker={"size": 6, "line": {"color": "rgba(17, 24, 39, 0.25)", "width": 0.3}}
+    )
+    fig.add_shape(
+        type="rect",
+        xref="x",
+        yref="y",
+        x0=population_cut,
+        x1=scatter_data["pop80"].max() * 1.1,
+        y0=max(0, scatter_data["access_per_1000"].min()),
+        y1=access_cut,
+        fillcolor="rgba(220, 38, 38, 0.10)",
+        line_width=0,
+        layer="below",
+    )
+    fig.add_vline(x=population_cut, line_dash="dash", line_color="#6b7280")
+    fig.add_hline(y=access_cut, line_dash="dash", line_color="#6b7280")
+    fig.add_annotation(
+        x=scatter_data["pop80"].quantile(0.90),
+        y=scatter_data["access_per_1000"].quantile(0.07),
+        text="개선 우선 검토영역",
+        showarrow=False,
+        font={"color": "#991b1b", "size": 12},
+        bgcolor="rgba(255, 255, 255, 0.78)",
+    )
+    fig.add_scatter(
+        x=top_priority["pop80"],
+        y=top_priority["access_per_1000"],
+        mode="markers",
+        name="시급성 상위 20개",
+        marker={
+            "size": 11,
+            "color": "rgba(255, 255, 255, 0)",
+            "line": {"color": "#dc2626", "width": 2.2},
+        },
+        customdata=top_priority[["location_label", "priority_score"]],
+        hovertemplate=(
+            "<b>%{customdata[0]}</b><br>"
+            "80세 이상 인구 %{x:,.0f}명<br>"
+            "수요 대비 접근성 %{y:.3f}<br>"
+            "개선 시급성 %{customdata[1]:.3f}"
+            "<extra>시급성 상위 20개</extra>"
+        ),
+    )
+    fig.update_xaxes(
+        tickvals=[5, 10, 25, 50, 100, 250, 500, 1000, 2000],
+        ticktext=["5", "10", "25", "50", "100", "250", "500", "1,000", "2,000"],
+        gridcolor="#e5e7eb",
+    )
+    fig.update_yaxes(gridcolor="#e5e7eb", rangemode="tozero")
+    fig.update_layout(
+        height=450,
+        margin=dict(l=10, r=10, t=10, b=10),
+        plot_bgcolor="#ffffff",
+        legend_title_text="개선 시급성 등급",
+    )
     st.plotly_chart(fig, width="stretch")
+    st.caption(
+        "점선은 고령인구 상위 25%와 접근성 하위 25%의 기준입니다. "
+        "붉은 영역은 개선 우선 검토영역이며, 빨간 테두리는 시급성 상위 20개 격자입니다."
+    )
 
 with chart_right:
     section_heading("장례서비스 개선 시급지역")
